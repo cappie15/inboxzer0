@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text, useTheme } from 'react-native-paper';
+import { Button, IconButton, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DraggableMailboxList from '../components/DraggableMailboxList';
 import {
@@ -11,10 +11,12 @@ import { useTriageStore } from '../store/triageStore';
 
 interface PreTriageScreenProps {
   onStartSession: () => void;
+  onOpenSettings: () => void;
 }
 
 export default function PreTriageScreen({
   onStartSession,
+  onOpenSettings,
 }: PreTriageScreenProps) {
   const theme = useTheme();
   const mailboxes = useMailboxStore((state) => state.mailboxes);
@@ -43,12 +45,15 @@ export default function PreTriageScreen({
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={['top', 'bottom']}
     >
-      <Text
-        variant="headlineSmall"
-        style={[styles.title, { color: theme.colors.onSurface }]}
-      >
-        Selecteer je mailboxen
-      </Text>
+      <View style={styles.titleRow}>
+        <Text
+          variant="headlineSmall"
+          style={[styles.title, { color: theme.colors.onSurface }]}
+        >
+          Selecteer je mailboxen
+        </Text>
+        <IconButton icon="cog-outline" onPress={onOpenSettings} />
+      </View>
       <Text
         variant="bodyMedium"
         style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
@@ -86,6 +91,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: '700',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   subtitle: {
     marginTop: 4,

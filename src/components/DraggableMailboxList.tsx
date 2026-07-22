@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ReactElement } from 'react';
 import DraggableFlatList, {
   RenderItemParams,
 } from 'react-native-draggable-flatlist';
@@ -9,12 +9,18 @@ interface DraggableMailboxListProps {
   mailboxes: Mailbox[];
   onToggle: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  onDelete?: (id: string) => void;
+  ListHeaderComponent?: ReactElement;
+  ListFooterComponent?: ReactElement;
 }
 
 export default function DraggableMailboxList({
   mailboxes,
   onToggle,
   onReorder,
+  onDelete,
+  ListHeaderComponent,
+  ListFooterComponent,
 }: DraggableMailboxListProps) {
   return (
     <DraggableFlatList
@@ -27,9 +33,12 @@ export default function DraggableMailboxList({
           onToggle={onToggle}
           onLongPressDrag={drag}
           isActive={isActive}
+          onDelete={onDelete}
         />
       )}
       containerStyle={{ flex: 1 }}
+      ListHeaderComponent={ListHeaderComponent}
+      ListFooterComponent={ListFooterComponent}
     />
   );
 }

@@ -21,6 +21,7 @@ interface MailboxRowProps {
   onToggle: (id: string) => void;
   onLongPressDrag: () => void;
   isActive: boolean;
+  onDelete?: (id: string) => void;
 }
 
 export default function MailboxRow({
@@ -28,6 +29,7 @@ export default function MailboxRow({
   onToggle,
   onLongPressDrag,
   isActive,
+  onDelete,
 }: MailboxRowProps) {
   const theme = useTheme();
 
@@ -64,6 +66,19 @@ export default function MailboxRow({
           {mailbox.emailAddress} · {PROVIDER_LABEL[mailbox.provider]}
         </Text>
       </View>
+      {onDelete && (
+        <Pressable
+          onPress={() => onDelete(mailbox.id)}
+          style={styles.deleteButton}
+          hitSlop={8}
+        >
+          <MaterialCommunityIcons
+            name="trash-can-outline"
+            size={20}
+            color={theme.colors.error}
+          />
+        </Pressable>
+      )}
       <Pressable onPressIn={onLongPressDrag} style={styles.dragHandle} hitSlop={8}>
         <MaterialCommunityIcons
           name="drag-horizontal-variant"
@@ -93,5 +108,8 @@ const styles = StyleSheet.create({
   },
   dragHandle: {
     paddingHorizontal: 8,
+  },
+  deleteButton: {
+    paddingHorizontal: 6,
   },
 });
