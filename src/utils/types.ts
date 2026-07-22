@@ -29,6 +29,8 @@ export interface EmailMessage {
   isRead: boolean;
   attachments: EmailAttachment[];
   priority?: 1 | 2 | 3 | 4;
+  /** UID on the originating IMAP server, present only for live IMAP-backed messages. */
+  imapUid?: number;
 }
 
 export type SwipeDirection = 'up' | 'down' | 'left' | 'right';

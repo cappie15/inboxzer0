@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, ProgressBar, Text, useTheme } from 'react-native-paper';
+import { Button, ProgressBar, Snackbar, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SwipeDeck from '../components/SwipeDeck';
@@ -19,6 +19,8 @@ export default function HomeScreen({ onSessionComplete }: HomeScreenProps) {
   const messagesById = useTriageStore((state) => state.messagesById);
   const queues = useTriageStore((state) => state.queues);
   const swipe = useTriageStore((state) => state.swipe);
+  const sessionError = useTriageStore((state) => state.sessionError);
+  const [errorDismissed, setErrorDismissed] = useState(false);
 
   const total = sessionQueue.length;
   const remaining = Math.max(total - currentIndex, 0);
@@ -121,6 +123,14 @@ export default function HomeScreen({ onSessionComplete }: HomeScreenProps) {
           <SwipeDeck messages={visibleMessages} onSwiped={handleSwiped} />
         </View>
       )}
+
+      <Snackbar
+        visible={Boolean(sessionError) && !errorDismissed}
+        onDismiss={() => setErrorDismissed(true)}
+        duration={6000}
+      >
+        {sessionError}
+      </Snackbar>
     </SafeAreaView>
   );
 }

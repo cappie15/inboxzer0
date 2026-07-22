@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, IconButton, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +19,9 @@ export default function PreTriageScreen({
   onOpenSettings,
 }: PreTriageScreenProps) {
   const theme = useTheme();
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
   const mailboxes = useMailboxStore((state) => state.mailboxes);
   const reorderMailboxes = useMailboxStore((state) => state.reorderMailboxes);
   const toggleMailboxSelected = useMailboxStore(
@@ -32,12 +35,24 @@ export default function PreTriageScreen({
   );
   const selectedCount = orderedMailboxes.filter((mb) => mb.selected).length;
 
-  const handleStart = () => {
-    const selectedIds = orderedMailboxes
-      .filter((mb) => mb.selected)
-      .map((mb) => mb.id);
-    startSession(selectedIds);
-    onStartSession();
+  const handleStart = async () => {
+    const selectedMailboxes = orderedMailboxes.filter((mb) => mb.selected);
+    setIsStarting(true);
+    setStartError(null);
+    try {
+      await startSession(selectedMailboxes);
+      const latestError = useTriageStore.getState().sessionError;
+      if (latestError) {
+        setStartError(latestError);
+      }
+      onStartSession();
+    } catch (err) {
+      setStartError(
+        err instanceof Error ? err.message : 'Kon de sessie niet starten.'
+      );
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   return (
@@ -69,15 +84,26 @@ export default function PreTriageScreen({
         />
       </View>
 
+      {startError && (
+        <Text
+          variant="bodySmall"
+          style={[styles.errorText, { color: theme.colors.error }]}
+        >
+          {startError}
+        </Text>
+      )}
+
       <Button
         mode="contained"
         onPress={handleStart}
-        disabled={selectedCount === 0}
+        disabled={selectedCount === 0 || isStarting}
+        loading={isStarting}
         style={styles.startButton}
         contentStyle={styles.startButtonContent}
       >
-        Start triage ({selectedCount}{' '}
-        {selectedCount === 1 ? 'mailbox' : 'mailboxen'})
+        {isStarting
+          ? 'Mailboxen verbinden…'
+          : `Start triage (${selectedCount} ${selectedCount === 1 ? 'mailbox' : 'mailboxen'})`}
       </Button>
     </SafeAreaView>
   );
@@ -103,6 +129,9 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     flex: 1,
+  },
+  errorText: {
+    marginBottom: 8,
   },
   startButton: {
     marginTop: 12,

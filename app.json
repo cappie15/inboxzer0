@@ -6,10 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "scheme": "inboxzer0",
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "nl.koskamp.inboxzer0",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

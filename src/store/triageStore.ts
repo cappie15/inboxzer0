@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { EmailMessage, SwipeDirection } from '../utils/types';
+import { EmailMessage, Mailbox, SwipeDirection } from '../utils/types';
 import { mockMessages, MOCK_USER_EMAIL } from '../services/mockData';
 import { sortMessagesByPriority } from '../utils/sortMessages';
+import { applyImapSwipeAction, fetchImapMessages } from '../services/imap/imapMailService';
 
 interface TriageQueues {
   queue_reply: string[];
@@ -17,8 +18,10 @@ interface TriageState {
   sessionQueue: string[];
   currentIndex: number;
   queues: TriageQueues;
+  isBuildingSession: boolean;
+  sessionError: string | null;
 
-  startSession: (orderedMailboxIds: string[]) => void;
+  startSession: (orderedMailboxes: Mailbox[]) => Promise<void>;
   swipe: (direction: SwipeDirection) => EmailMessage | undefined;
   currentMessage: () => EmailMessage | undefined;
   remainingCount: () => number;
@@ -42,35 +45,64 @@ function buildSessionQueue(
   return queue;
 }
 
+const emptyQueues: TriageQueues = {
+  queue_reply: [],
+  queue_postponed: [],
+  queue_archived: [],
+  queue_forward: [],
+  queue_re_review: [],
+};
+
 export const useTriageStore = create<TriageState>()((set, get) => ({
   userEmail: MOCK_USER_EMAIL,
   messagesById: Object.fromEntries(mockMessages.map((m) => [m.id, m])),
   sessionQueue: [],
   currentIndex: 0,
-  queues: {
-    queue_reply: [],
-    queue_postponed: [],
-    queue_archived: [],
-    queue_forward: [],
-    queue_re_review: [],
-  },
+  queues: emptyQueues,
+  isBuildingSession: false,
+  sessionError: null,
 
-  startSession: (orderedMailboxIds) =>
-    set((state) => ({
-      sessionQueue: buildSessionQueue(
-        state.messagesById,
-        orderedMailboxIds,
-        state.userEmail
-      ),
-      currentIndex: 0,
-      queues: {
-        queue_reply: [],
-        queue_postponed: [],
-        queue_archived: [],
-        queue_forward: [],
-        queue_re_review: [],
-      },
-    })),
+  startSession: async (orderedMailboxes) => {
+    set({ isBuildingSession: true, sessionError: null });
+
+    const imapMailboxes = orderedMailboxes.filter((mb) => mb.provider === 'imap');
+    const results = await Promise.allSettled(
+      imapMailboxes.map((mb) => fetchImapMessages(mb))
+    );
+
+    const failedMailboxes = imapMailboxes.filter((_, index) => results[index].status === 'rejected');
+    if (failedMailboxes.length > 0) {
+      const names = failedMailboxes.map((mb) => mb.displayName).join(', ');
+      console.warn(`Kon geen verbinding maken met: ${names}`);
+    }
+
+    set((state) => {
+      const mergedMessages = { ...state.messagesById };
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          for (const message of result.value) {
+            mergedMessages[message.id] = message;
+          }
+        }
+      }
+
+      return {
+        messagesById: mergedMessages,
+        sessionQueue: buildSessionQueue(
+          mergedMessages,
+          orderedMailboxes.map((mb) => mb.id),
+          state.userEmail
+        ),
+        currentIndex: 0,
+        queues: emptyQueues,
+        isBuildingSession: false,
+        sessionError:
+          failedMailboxes.length > 0
+            ? `Kon geen verbinding maken met: ${failedMailboxes.map((mb) => mb.displayName).join(', ')}`
+            : null,
+      };
+    });
+  },
 
   swipe: (direction) => {
     const state = get();
@@ -101,6 +133,12 @@ export const useTriageStore = create<TriageState>()((set, get) => ({
       },
       currentIndex: state.currentIndex + 1,
     });
+
+    if (updatedMessage.imapUid !== undefined) {
+      applyImapSwipeAction(updatedMessage, direction).catch((err) => {
+        console.warn('IMAP swipe-actie mislukt:', err);
+      });
+    }
 
     return updatedMessage;
   },
