@@ -44,14 +44,16 @@ export default function HomeScreen({ onSessionComplete }: HomeScreenProps) {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={['top', 'bottom']}
     >
-      <ProgressBar
-        progress={progress}
-        color={theme.colors.primary}
-        style={[
-          styles.progressBar,
-          { backgroundColor: theme.colors.surfaceVariant },
-        ]}
-      />
+      <View style={styles.progressBarWrapper}>
+        <ProgressBar
+          progress={progress}
+          color={theme.colors.primary}
+          style={[
+            styles.progressBar,
+            { backgroundColor: theme.colors.surfaceVariant },
+          ]}
+        />
+      </View>
 
       <View style={styles.headerRow}>
         <Text
@@ -145,10 +147,13 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
+  progressBarWrapper: {
+    height: 3,
+    marginTop: 8,
+  },
   progressBar: {
     height: 3,
     borderRadius: 2,
-    marginTop: 8,
   },
   headerRow: {
     flexDirection: 'row',

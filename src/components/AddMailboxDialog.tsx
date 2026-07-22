@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import {
   Button,
   Dialog,
@@ -99,7 +99,7 @@ export default function AddMailboxDialog({
       <Dialog visible={visible} onDismiss={handleDismiss}>
         <Dialog.Title>Mailbox toevoegen</Dialog.Title>
         <Dialog.ScrollArea style={styles.scrollArea}>
-          <Dialog.Content>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
             <SegmentedButtons
               value={provider}
               onValueChange={(value) => setProvider(value as MailProvider)}
@@ -178,7 +178,7 @@ export default function AddMailboxDialog({
                 </View>
               </>
             )}
-          </Dialog.Content>
+          </ScrollView>
         </Dialog.ScrollArea>
         <Dialog.Actions>
           <Button onPress={handleDismiss}>Annuleren</Button>
@@ -194,6 +194,9 @@ export default function AddMailboxDialog({
 const styles = StyleSheet.create({
   scrollArea: {
     maxHeight: 420,
+  },
+  scrollContent: {
+    paddingVertical: 16,
   },
   segmented: {
     marginBottom: 12,
