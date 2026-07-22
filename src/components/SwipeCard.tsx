@@ -251,10 +251,46 @@ export default function SwipeCard({
       <Text
         variant="bodyMedium"
         style={{ color: theme.colors.onSurfaceVariant }}
-        numberOfLines={6}
+        numberOfLines={attachmentCount > 0 ? 4 : 6}
       >
         {message.body}
       </Text>
+
+      {attachmentCount > 0 && (
+        <View style={styles.attachmentsList}>
+          {message.attachments.map((attachment) => (
+            <View
+              key={attachment.id}
+              style={[
+                styles.attachmentChip,
+                { backgroundColor: theme.colors.surfaceVariant },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="paperclip"
+                size={14}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <Text
+                variant="labelSmall"
+                numberOfLines={1}
+                style={[
+                  styles.attachmentChipText,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
+              >
+                {attachment.fileName}
+              </Text>
+              <Text
+                variant="labelSmall"
+                style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}
+              >
+                {attachment.sizeKb} KB
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={styles.footer}>
         {message.priority && (
@@ -269,21 +305,6 @@ export default function SwipeCard({
               style={{ color: theme.colors.onSurfaceVariant }}
             >
               Prio {message.priority}
-            </Text>
-          </View>
-        )}
-        {attachmentCount > 0 && (
-          <View style={styles.attachmentRow}>
-            <MaterialCommunityIcons
-              name="paperclip"
-              size={16}
-              color={theme.colors.onSurfaceVariant}
-            />
-            <Text
-              variant="labelSmall"
-              style={{ color: theme.colors.onSurfaceVariant, marginLeft: 2 }}
-            >
-              {attachmentCount}
             </Text>
           </View>
         )}
@@ -350,9 +371,22 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  attachmentRow: {
+  attachmentsList: {
+    marginTop: 10,
+  },
+  attachmentChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 6,
+  },
+  attachmentChipText: {
+    marginHorizontal: 6,
+    flexShrink: 1,
   },
   stamp: {
     position: 'absolute',
