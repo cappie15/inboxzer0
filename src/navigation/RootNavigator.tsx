@@ -6,11 +6,20 @@ import {
 import PreTriageScreen from '../screens/PreTriageScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ForwardProcessingScreen from '../screens/ForwardProcessingScreen';
+import ReplyReviewScreen from '../screens/ReplyReviewScreen';
+import PostponedPromptScreen from '../screens/PostponedPromptScreen';
+import SmartRulesScreen from '../screens/SmartRulesScreen';
+import { useTriageStore } from '../store/triageStore';
 
 export type RootStackParamList = {
   PreTriage: undefined;
   Home: undefined;
   Settings: undefined;
+  ForwardProcessing: undefined;
+  ReplyReview: undefined;
+  PostponedPrompt: undefined;
+  SmartRules: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -30,11 +39,7 @@ function HomeRoute({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, 'Home'>) {
   return (
-    <HomeScreen
-      onSessionComplete={() =>
-        navigation.reset({ index: 0, routes: [{ name: 'PreTriage' }] })
-      }
-    />
+    <HomeScreen onSessionComplete={() => navigation.replace('ForwardProcessing')} />
   );
 }
 
@@ -42,6 +47,48 @@ function SettingsRoute({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, 'Settings'>) {
   return <SettingsScreen onClose={() => navigation.goBack()} />;
+}
+
+function ForwardProcessingRoute({
+  navigation,
+}: NativeStackScreenProps<RootStackParamList, 'ForwardProcessing'>) {
+  return (
+    <ForwardProcessingScreen onComplete={() => navigation.replace('ReplyReview')} />
+  );
+}
+
+function ReplyReviewRoute({
+  navigation,
+}: NativeStackScreenProps<RootStackParamList, 'ReplyReview'>) {
+  return (
+    <ReplyReviewScreen
+      onComplete={() => {
+        const hasPostponed = useTriageStore.getState().queues.queue_postponed.length > 0;
+        navigation.replace(hasPostponed ? 'PostponedPrompt' : 'SmartRules');
+      }}
+    />
+  );
+}
+
+function PostponedPromptRoute({
+  navigation,
+}: NativeStackScreenProps<RootStackParamList, 'PostponedPrompt'>) {
+  return (
+    <PostponedPromptScreen
+      onHandleNow={() => navigation.replace('Home')}
+      onSkip={() => navigation.replace('SmartRules')}
+    />
+  );
+}
+
+function SmartRulesRoute({
+  navigation,
+}: NativeStackScreenProps<RootStackParamList, 'SmartRules'>) {
+  return (
+    <SmartRulesScreen
+      onDone={() => navigation.reset({ index: 0, routes: [{ name: 'PreTriage' }] })}
+    />
+  );
 }
 
 export default function RootNavigator() {
@@ -54,6 +101,10 @@ export default function RootNavigator() {
         component={SettingsRoute}
         options={{ presentation: 'modal' }}
       />
+      <Stack.Screen name="ForwardProcessing" component={ForwardProcessingRoute} />
+      <Stack.Screen name="ReplyReview" component={ReplyReviewRoute} />
+      <Stack.Screen name="PostponedPrompt" component={PostponedPromptRoute} />
+      <Stack.Screen name="SmartRules" component={SmartRulesRoute} />
     </Stack.Navigator>
   );
 }

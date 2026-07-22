@@ -4,12 +4,16 @@ import { mockMessages, MOCK_USER_EMAIL } from '../services/mockData';
 import { sortMessagesByPriority } from '../utils/sortMessages';
 import { applyImapSwipeAction, fetchImapMessages } from '../services/imap/imapMailService';
 
+export interface ReplyQueueItem {
+  messageId: string;
+  mode: 'reply' | 'replyAll';
+}
+
 interface TriageQueues {
-  queue_reply: string[];
+  queue_reply: ReplyQueueItem[];
   queue_postponed: string[];
   queue_archived: string[];
   queue_forward: string[];
-  queue_re_review: string[];
 }
 
 interface TriageState {
@@ -22,7 +26,11 @@ interface TriageState {
   sessionError: string | null;
 
   startSession: (orderedMailboxes: Mailbox[]) => Promise<void>;
-  swipe: (direction: SwipeDirection) => EmailMessage | undefined;
+  startPostponedRound: () => void;
+  swipe: (
+    direction: SwipeDirection,
+    replyMode?: 'reply' | 'replyAll'
+  ) => EmailMessage | undefined;
   currentMessage: () => EmailMessage | undefined;
   remainingCount: () => number;
   totalCount: () => number;
@@ -50,7 +58,6 @@ const emptyQueues: TriageQueues = {
   queue_postponed: [],
   queue_archived: [],
   queue_forward: [],
-  queue_re_review: [],
 };
 
 export const useTriageStore = create<TriageState>()((set, get) => ({
@@ -104,7 +111,21 @@ export const useTriageStore = create<TriageState>()((set, get) => ({
     });
   },
 
-  swipe: (direction) => {
+  startPostponedRound: () => {
+    const state = get();
+    const postponedMessages = state.queues.queue_postponed
+      .map((id) => state.messagesById[id])
+      .filter((m): m is EmailMessage => m !== undefined);
+    const sorted = sortMessagesByPriority(postponedMessages, state.userEmail);
+
+    set({
+      sessionQueue: sorted.map((m) => m.id),
+      currentIndex: 0,
+      queues: { ...state.queues, queue_postponed: [] },
+    });
+  },
+
+  swipe: (direction, replyMode) => {
     const state = get();
     const messageId = state.sessionQueue[state.currentIndex];
     const message = state.messagesById[messageId];
@@ -113,24 +134,34 @@ export const useTriageStore = create<TriageState>()((set, get) => ({
     const markRead = direction !== 'down';
     const updatedMessage: EmailMessage = { ...message, isRead: markRead };
 
-    const queueKey: keyof TriageQueues =
-      direction === 'up'
-        ? 'queue_reply'
-        : direction === 'down'
+    let queues: TriageQueues;
+    if (direction === 'up') {
+      queues = {
+        ...state.queues,
+        queue_reply: [
+          ...state.queues.queue_reply,
+          { messageId, mode: replyMode ?? 'reply' },
+        ],
+      };
+    } else {
+      const queueKey: 'queue_postponed' | 'queue_archived' | 'queue_forward' =
+        direction === 'down'
           ? 'queue_postponed'
           : direction === 'right'
             ? 'queue_archived'
             : 'queue_forward';
+      queues = {
+        ...state.queues,
+        [queueKey]: [...state.queues[queueKey], messageId],
+      };
+    }
 
     set({
       messagesById: {
         ...state.messagesById,
         [messageId]: updatedMessage,
       },
-      queues: {
-        ...state.queues,
-        [queueKey]: [...state.queues[queueKey], messageId],
-      },
+      queues,
       currentIndex: state.currentIndex + 1,
     });
 

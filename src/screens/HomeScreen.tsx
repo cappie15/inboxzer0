@@ -1,6 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, ProgressBar, Snackbar, Text, useTheme } from 'react-native-paper';
+import {
+  Button,
+  Dialog,
+  Portal,
+  ProgressBar,
+  Snackbar,
+  Text,
+  useTheme,
+} from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SwipeDeck from '../components/SwipeDeck';
@@ -19,8 +27,10 @@ export default function HomeScreen({ onSessionComplete }: HomeScreenProps) {
   const messagesById = useTriageStore((state) => state.messagesById);
   const queues = useTriageStore((state) => state.queues);
   const swipe = useTriageStore((state) => state.swipe);
+  const getCurrentMessage = useTriageStore((state) => state.currentMessage);
   const sessionError = useTriageStore((state) => state.sessionError);
   const [errorDismissed, setErrorDismissed] = useState(false);
+  const [replyModalVisible, setReplyModalVisible] = useState(false);
 
   const total = sessionQueue.length;
   const remaining = Math.max(total - currentIndex, 0);
@@ -36,7 +46,16 @@ export default function HomeScreen({ onSessionComplete }: HomeScreenProps) {
   );
 
   const handleSwiped = (direction: SwipeDirection) => {
+    if (direction === 'up') {
+      setReplyModalVisible(true);
+      return;
+    }
     swipe(direction);
+  };
+
+  const handleReplyModeChosen = (mode: 'reply' | 'replyAll') => {
+    setReplyModalVisible(false);
+    swipe('up', mode);
   };
 
   const isSessionDone = remaining === 0;
@@ -115,7 +134,7 @@ export default function HomeScreen({ onSessionComplete }: HomeScreenProps) {
             onPress={onSessionComplete}
             style={styles.doneButton}
           >
-            Terug naar mailbox-selectie
+            Concepten verwerken
           </Button>
         </View>
       ) : (
@@ -131,6 +150,29 @@ export default function HomeScreen({ onSessionComplete }: HomeScreenProps) {
       >
         {sessionError}
       </Snackbar>
+
+      <Portal>
+        <Dialog visible={replyModalVisible} dismissable={false}>
+          <Dialog.Title>Hoe wil je antwoorden?</Dialog.Title>
+          <Dialog.Content>
+            <Text
+              variant="bodyMedium"
+              numberOfLines={2}
+              style={{ color: theme.colors.onSurfaceVariant }}
+            >
+              {getCurrentMessage()?.subject}
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => handleReplyModeChosen('replyAll')}>
+              Allen antwoorden
+            </Button>
+            <Button mode="contained" onPress={() => handleReplyModeChosen('reply')}>
+              Antwoorden
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
