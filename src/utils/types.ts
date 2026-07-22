@@ -58,3 +58,11 @@ export interface AISettings {
   provider: 'anthropic' | 'openai';
   apiKey: string;
 }
+
+export interface ImapCredentials {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  useSsl: boolean;
+}

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Mailbox, MailProvider } from '../utils/types';
 import { mockMailboxes } from '../services/mockData';
+import { deleteImapCredentials } from '../services/imapCredentialsStore';
 
 interface MailboxState {
   mailboxes: Mailbox[];
@@ -13,13 +14,13 @@ interface MailboxState {
     displayName: string;
     emailAddress: string;
     provider: MailProvider;
-  }) => void;
+  }) => string;
   removeMailbox: (id: string) => void;
 }
 
 export const useMailboxStore = create<MailboxState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       mailboxes: mockMailboxes,
 
       reorderMailboxes: (orderedIds) =>
@@ -48,12 +49,13 @@ export const useMailboxStore = create<MailboxState>()(
           ),
         })),
 
-      addMailbox: ({ displayName, emailAddress, provider }) =>
+      addMailbox: ({ displayName, emailAddress, provider }) => {
+        const id = `mb-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
         set((state) => ({
           mailboxes: [
             ...state.mailboxes,
             {
-              id: `mb-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+              id,
               displayName,
               emailAddress,
               provider,
@@ -61,14 +63,21 @@ export const useMailboxStore = create<MailboxState>()(
               selected: true,
             },
           ],
-        })),
+        }));
+        return id;
+      },
 
-      removeMailbox: (id) =>
+      removeMailbox: (id) => {
+        const removed = get().mailboxes.find((mb) => mb.id === id);
         set((state) => ({
           mailboxes: state.mailboxes
             .filter((mb) => mb.id !== id)
             .map((mb, index) => ({ ...mb, order: index })),
-        })),
+        }));
+        if (removed?.provider === 'imap') {
+          deleteImapCredentials(id).catch(() => undefined);
+        }
+      },
     }),
     {
       name: 'inboxzer0-mailboxes',

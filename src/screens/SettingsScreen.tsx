@@ -17,6 +17,8 @@ import {
   useMailboxStore,
 } from '../store/mailboxStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { saveImapCredentials } from '../services/imapCredentialsStore';
+import { ImapCredentials, MailProvider } from '../utils/types';
 
 interface SettingsScreenProps {
   onClose: () => void;
@@ -33,6 +35,22 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
   );
   const addMailbox = useMailboxStore((state) => state.addMailbox);
   const removeMailbox = useMailboxStore((state) => state.removeMailbox);
+
+  const handleAddMailbox = (input: {
+    displayName: string;
+    emailAddress: string;
+    provider: MailProvider;
+    imapCredentials?: ImapCredentials;
+  }) => {
+    const id = addMailbox({
+      displayName: input.displayName,
+      emailAddress: input.emailAddress,
+      provider: input.provider,
+    });
+    if (input.imapCredentials) {
+      saveImapCredentials(id, input.imapCredentials).catch(() => undefined);
+    }
+  };
 
   const writingStyle = useSettingsStore((state) => state.writingStyle);
   const setWritingStyleMode = useSettingsStore(
@@ -180,7 +198,7 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
       <AddMailboxDialog
         visible={addDialogVisible}
         onDismiss={() => setAddDialogVisible(false)}
-        onSubmit={addMailbox}
+        onSubmit={handleAddMailbox}
       />
     </SafeAreaView>
   );
