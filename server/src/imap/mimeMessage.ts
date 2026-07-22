@@ -1,4 +1,4 @@
-import { EmailMessage } from '../../utils/types';
+import { EmailMessage } from '../types';
 
 export interface ForwardDraftParams {
   fromAddress: string;

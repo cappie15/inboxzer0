@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import {
+  ActivityIndicator,
   Button,
   Dialog,
   Portal,
@@ -19,7 +20,7 @@ interface AddMailboxDialogProps {
     emailAddress: string;
     provider: MailProvider;
     imapCredentials?: ImapCredentials;
-  }) => void;
+  }) => Promise<void>;
 }
 
 const PROVIDER_OPTIONS: { value: MailProvider; label: string }[] = [
@@ -43,6 +44,8 @@ export default function AddMailboxDialog({
   const [imapUsername, setImapUsername] = useState('');
   const [imapPassword, setImapPassword] = useState('');
   const [imapUseSsl, setImapUseSsl] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const isOAuthProvider = provider === 'm365' || provider === 'gmail';
   const isImapProvider = provider === 'imap';
@@ -67,31 +70,43 @@ export default function AddMailboxDialog({
     setImapUsername('');
     setImapPassword('');
     setImapUseSsl(true);
+    setSubmitError(null);
   };
 
   const handleDismiss = () => {
+    if (isSubmitting) return;
     reset();
     onDismiss();
   };
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
-    onSubmit({
-      displayName: displayName.trim(),
-      emailAddress: emailAddress.trim(),
-      provider,
-      imapCredentials: isImapProvider
-        ? {
-            host: imapHost.trim(),
-            port: portNumber,
-            username: imapUsername.trim(),
-            password: imapPassword,
-            useSsl: imapUseSsl,
-          }
-        : undefined,
-    });
-    reset();
-    onDismiss();
+  const handleSubmit = async () => {
+    if (!canSubmit || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmit({
+        displayName: displayName.trim(),
+        emailAddress: emailAddress.trim(),
+        provider,
+        imapCredentials: isImapProvider
+          ? {
+              host: imapHost.trim(),
+              port: portNumber,
+              username: imapUsername.trim(),
+              password: imapPassword,
+              useSsl: imapUseSsl,
+            }
+          : undefined,
+      });
+      reset();
+      onDismiss();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'Kon de mailbox niet toevoegen.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -135,9 +150,8 @@ export default function AddMailboxDialog({
             {isImapProvider && (
               <>
                 <Text variant="bodySmall" style={styles.hint}>
-                  Deze gegevens worden lokaal versleuteld opgeslagen. Live
-                  IMAP-synchronisatie volgt in een latere stap — de mailbox
-                  draait tot die tijd op voorbeelddata.
+                  Deze gegevens worden versleuteld opgeslagen op je eigen
+                  server. We testen de verbinding meteen bij het toevoegen.
                 </Text>
                 <TextInput
                   label="IMAP-host"
@@ -178,13 +192,25 @@ export default function AddMailboxDialog({
                 </View>
               </>
             )}
+
+            {submitError && (
+              <Text variant="bodySmall" style={styles.errorText}>
+                {submitError}
+              </Text>
+            )}
           </ScrollView>
         </Dialog.ScrollArea>
         <Dialog.Actions>
-          <Button onPress={handleDismiss}>Annuleren</Button>
-          <Button onPress={handleSubmit} disabled={!canSubmit}>
-            Toevoegen
+          <Button onPress={handleDismiss} disabled={isSubmitting}>
+            Annuleren
           </Button>
+          {isSubmitting ? (
+            <ActivityIndicator style={styles.submitSpinner} />
+          ) : (
+            <Button onPress={handleSubmit} disabled={!canSubmit}>
+              Toevoegen
+            </Button>
+          )}
         </Dialog.Actions>
       </Dialog>
     </Portal>
@@ -213,5 +239,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  errorText: {
+    color: '#E5484D',
+    marginTop: 4,
+  },
+  submitSpinner: {
+    marginHorizontal: 20,
   },
 });

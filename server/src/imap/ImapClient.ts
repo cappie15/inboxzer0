@@ -1,6 +1,8 @@
-import TcpSockets from 'react-native-tcp-socket';
+import * as tls from 'tls';
+import * as net from 'net';
+import { Socket } from 'net';
 import { ImapStreamParser } from './imapStreamParser';
-import { ImapCredentials } from '../../utils/types';
+import { ImapCredentials } from '../types';
 
 export interface ImapFetchedMessage {
   uid: number;
@@ -28,20 +30,6 @@ const CONNECT_TIMEOUT_MS = 15000;
 
 function quoteImapString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-}
-
-function utf8ByteLength(str: string): number {
-  let bytes = 0;
-  for (let i = 0; i < str.length; i++) {
-    const code = str.codePointAt(i);
-    if (code === undefined) continue;
-    if (code > 0xffff) i++; // surrogate pair — already counted as one codePoint
-    if (code <= 0x7f) bytes += 1;
-    else if (code <= 0x7ff) bytes += 2;
-    else if (code <= 0xffff) bytes += 3;
-    else bytes += 4;
-  }
-  return bytes;
 }
 
 function parseStatus(statusLine: string): 'OK' | 'NO' | 'BAD' {
@@ -76,16 +64,17 @@ export function parseFetchLine(line: string): ImapFetchedMessage | null {
 }
 
 /**
- * Minimal IMAP4rev1 client over TLS, scoped to what InboxZer0 needs:
- * connect, login, select INBOX, fetch recent headers+flags, mark
- * read/unread, and move a message to another mailbox (archive).
+ * Minimal IMAP4rev1 client over TLS (or plain TCP, for servers without
+ * implicit TLS — no STARTTLS upgrade support), scoped to what InboxZer0
+ * needs: connect, login, select INBOX, fetch recent headers+flags, mark
+ * read/unread, move a message, and append a draft.
  *
  * This is deliberately not a full IMAP implementation (no IDLE, no
  * multi-command pipelining, no general-purpose response parsing) — it only
  * needs to work against the shape of commands it issues itself.
  */
 export class ImapClient {
-  private socket: ReturnType<typeof TcpSockets.connectTLS> | null = null;
+  private socket: Socket | null = null;
   private parser = new ImapStreamParser();
   private tagCounter = 0;
   private pending: PendingCommand | null = null;
@@ -115,11 +104,15 @@ export class ImapClient {
       };
 
       try {
-        this.socket = TcpSockets.connectTLS({
-          host: this.credentials.host,
-          port: this.credentials.port,
-          tls: this.credentials.useSsl,
-        });
+        this.socket = this.credentials.useSsl
+          ? tls.connect({
+              host: this.credentials.host,
+              port: this.credentials.port,
+            })
+          : net.connect({
+              host: this.credentials.host,
+              port: this.credentials.port,
+            });
       } catch (err) {
         finish(() => reject(err instanceof Error ? err : new Error(String(err))));
         return;
@@ -329,7 +322,7 @@ export class ImapClient {
     rawMessage: string,
     flags: string[] = []
   ): Promise<void> {
-    const byteLength = utf8ByteLength(rawMessage);
+    const byteLength = Buffer.byteLength(rawMessage, 'utf8');
     const flagsPart = flags.length > 0 ? ` (${flags.join(' ')})` : '';
     const command = `APPEND ${quoteImapString(mailboxName)}${flagsPart} {${byteLength}}`;
 

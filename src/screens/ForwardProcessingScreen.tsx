@@ -12,7 +12,7 @@ import { useTriageStore } from '../store/triageStore';
 import { useMailboxStore } from '../store/mailboxStore';
 import { useContactsStore } from '../store/contactsStore';
 import { generateForwardNote } from '../services/ai/draftGeneration';
-import { saveForwardDraft } from '../services/draftService';
+import { api } from '../services/apiClient';
 
 interface ForwardProcessingScreenProps {
   onComplete: () => void;
@@ -27,7 +27,7 @@ export default function ForwardProcessingScreen({
   const forwardQueue = useTriageStore((state) => state.queues.queue_forward);
   const messagesById = useTriageStore((state) => state.messagesById);
   const mailboxes = useMailboxStore((state) => state.mailboxes);
-  const recordContactUsed = useContactsStore((state) => state.recordContactUsed);
+  const loadContacts = useContactsStore((state) => state.loadContacts);
 
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState<Status>('idle');
@@ -60,8 +60,8 @@ export default function ForwardProcessingScreen({
     try {
       const note = await generateForwardNote(message, contact.name);
       setStatus('saving');
-      await saveForwardDraft(mailbox, message, contact, note);
-      recordContactUsed(contact);
+      await api.saveForwardDraft(mailbox.id, message.imapUid, contact, note, message);
+      loadContacts();
       advance();
     } catch (err) {
       setStatus('error');

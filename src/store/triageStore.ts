@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { EmailMessage, Mailbox, SwipeDirection } from '../utils/types';
-import { mockMessages, MOCK_USER_EMAIL } from '../services/mockData';
 import { sortMessagesByPriority } from '../utils/sortMessages';
-import { applyImapSwipeAction, fetchImapMessages } from '../services/imap/imapMailService';
+import { api } from '../services/apiClient';
 
 export interface ReplyQueueItem {
   messageId: string;
@@ -17,13 +16,14 @@ interface TriageQueues {
 }
 
 interface TriageState {
-  userEmail: string;
   messagesById: Record<string, EmailMessage>;
   sessionQueue: string[];
   currentIndex: number;
   queues: TriageQueues;
   isBuildingSession: boolean;
   sessionError: string | null;
+  /** mailboxId -> owning account's email address, needed to re-sort postponed rounds. */
+  mailboxEmailById: Record<string, string>;
 
   startSession: (orderedMailboxes: Mailbox[]) => Promise<void>;
   startPostponedRound: () => void;
@@ -37,22 +37,6 @@ interface TriageState {
   postponedCount: () => number;
 }
 
-function buildSessionQueue(
-  messagesById: Record<string, EmailMessage>,
-  orderedMailboxIds: string[],
-  userEmail: string
-): string[] {
-  const queue: string[] = [];
-  for (const mailboxId of orderedMailboxIds) {
-    const unreadInMailbox = Object.values(messagesById).filter(
-      (m) => m.mailboxId === mailboxId && !m.isRead
-    );
-    const sorted = sortMessagesByPriority(unreadInMailbox, userEmail);
-    queue.push(...sorted.map((m) => m.id));
-  }
-  return queue;
-}
-
 const emptyQueues: TriageQueues = {
   queue_reply: [],
   queue_postponed: [],
@@ -61,53 +45,51 @@ const emptyQueues: TriageQueues = {
 };
 
 export const useTriageStore = create<TriageState>()((set, get) => ({
-  userEmail: MOCK_USER_EMAIL,
-  messagesById: Object.fromEntries(mockMessages.map((m) => [m.id, m])),
+  messagesById: {},
   sessionQueue: [],
   currentIndex: 0,
   queues: emptyQueues,
   isBuildingSession: false,
   sessionError: null,
+  mailboxEmailById: {},
 
   startSession: async (orderedMailboxes) => {
     set({ isBuildingSession: true, sessionError: null });
 
-    const imapMailboxes = orderedMailboxes.filter((mb) => mb.provider === 'imap');
     const results = await Promise.allSettled(
-      imapMailboxes.map((mb) => fetchImapMessages(mb))
+      orderedMailboxes.map((mb) => api.getMessages(mb.id))
     );
 
-    const failedMailboxes = imapMailboxes.filter((_, index) => results[index].status === 'rejected');
-    if (failedMailboxes.length > 0) {
-      const names = failedMailboxes.map((mb) => mb.displayName).join(', ');
-      console.warn(`Kon geen verbinding maken met: ${names}`);
-    }
+    const failedMailboxes = orderedMailboxes.filter(
+      (_, index) => results[index].status === 'rejected'
+    );
 
-    set((state) => {
-      const mergedMessages = { ...state.messagesById };
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          for (const message of result.value) {
-            mergedMessages[message.id] = message;
-          }
-        }
+    const mergedMessages: Record<string, EmailMessage> = {};
+    const sortedIdsByMailbox: string[][] = orderedMailboxes.map(() => []);
+
+    results.forEach((result, index) => {
+      if (result.status !== 'fulfilled') return;
+      const mailbox = orderedMailboxes[index];
+      const sorted = sortMessagesByPriority(result.value.messages, mailbox.emailAddress);
+      sortedIdsByMailbox[index] = sorted.map((m) => m.id);
+      for (const message of sorted) {
+        mergedMessages[message.id] = message;
       }
+    });
 
-      return {
-        messagesById: mergedMessages,
-        sessionQueue: buildSessionQueue(
-          mergedMessages,
-          orderedMailboxes.map((mb) => mb.id),
-          state.userEmail
-        ),
-        currentIndex: 0,
-        queues: emptyQueues,
-        isBuildingSession: false,
-        sessionError:
-          failedMailboxes.length > 0
-            ? `Kon geen verbinding maken met: ${failedMailboxes.map((mb) => mb.displayName).join(', ')}`
-            : null,
-      };
+    set({
+      messagesById: mergedMessages,
+      sessionQueue: sortedIdsByMailbox.flat(),
+      currentIndex: 0,
+      queues: emptyQueues,
+      isBuildingSession: false,
+      mailboxEmailById: Object.fromEntries(
+        orderedMailboxes.map((mb) => [mb.id, mb.emailAddress])
+      ),
+      sessionError:
+        failedMailboxes.length > 0
+          ? `Kon geen verbinding maken met: ${failedMailboxes.map((mb) => mb.displayName).join(', ')}`
+          : null,
     });
   },
 
@@ -116,10 +98,28 @@ export const useTriageStore = create<TriageState>()((set, get) => ({
     const postponedMessages = state.queues.queue_postponed
       .map((id) => state.messagesById[id])
       .filter((m): m is EmailMessage => m !== undefined);
-    const sorted = sortMessagesByPriority(postponedMessages, state.userEmail);
+
+    // Group back by mailbox so each mailbox's messages are still sorted
+    // against that mailbox's own address, then keep the existing relative
+    // mailbox order from the current sessionQueue.
+    const byMailbox = new Map<string, EmailMessage[]>();
+    for (const message of postponedMessages) {
+      const list = byMailbox.get(message.mailboxId) ?? [];
+      list.push(message);
+      byMailbox.set(message.mailboxId, list);
+    }
+    const seenMailboxIds: string[] = [];
+    for (const message of postponedMessages) {
+      if (!seenMailboxIds.includes(message.mailboxId)) seenMailboxIds.push(message.mailboxId);
+    }
+    const nextQueue = seenMailboxIds.flatMap((mailboxId) => {
+      const messages = byMailbox.get(mailboxId) ?? [];
+      const ownerEmail = state.mailboxEmailById[mailboxId] ?? '';
+      return sortMessagesByPriority(messages, ownerEmail).map((m) => m.id);
+    });
 
     set({
-      sessionQueue: sorted.map((m) => m.id),
+      sessionQueue: nextQueue,
       currentIndex: 0,
       queues: { ...state.queues, queue_postponed: [] },
     });
@@ -165,9 +165,12 @@ export const useTriageStore = create<TriageState>()((set, get) => ({
       currentIndex: state.currentIndex + 1,
     });
 
-    if (updatedMessage.imapUid !== undefined) {
-      applyImapSwipeAction(updatedMessage, direction).catch((err) => {
-        console.warn('IMAP swipe-actie mislukt:', err);
+    api.markRead(message.mailboxId, message.imapUid, markRead).catch((err) => {
+      console.warn('Kon gelezen-status niet bijwerken op de server:', err);
+    });
+    if (direction === 'right') {
+      api.archiveMessage(message.mailboxId, message.imapUid).catch((err) => {
+        console.warn('Kon bericht niet archiveren op de server:', err);
       });
     }
 
