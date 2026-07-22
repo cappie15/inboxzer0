@@ -19,6 +19,8 @@ interface PendingCommand {
   untagged: string[];
   resolve: (statusLine: string) => void;
   reject: (err: Error) => void;
+  awaitingContinuation?: boolean;
+  onContinuation?: () => void;
 }
 
 const COMMAND_TIMEOUT_MS = 20000;
@@ -26,6 +28,20 @@ const CONNECT_TIMEOUT_MS = 15000;
 
 function quoteImapString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function utf8ByteLength(str: string): number {
+  let bytes = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.codePointAt(i);
+    if (code === undefined) continue;
+    if (code > 0xffff) i++; // surrogate pair — already counted as one codePoint
+    if (code <= 0x7f) bytes += 1;
+    else if (code <= 0x7ff) bytes += 2;
+    else if (code <= 0xffff) bytes += 3;
+    else bytes += 4;
+  }
+  return bytes;
 }
 
 function parseStatus(statusLine: string): 'OK' | 'NO' | 'BAD' {
@@ -132,6 +148,11 @@ export class ImapClient {
 
   private handleLine(line: string): void {
     if (this.pending) {
+      if (this.pending.awaitingContinuation && line.startsWith('+')) {
+        this.pending.awaitingContinuation = false;
+        this.pending.onContinuation?.();
+        return;
+      }
       const tagPrefix = `${this.pending.tag} `;
       if (line.startsWith(tagPrefix)) {
         const completed = this.pending;
@@ -178,6 +199,52 @@ export class ImapClient {
       this.pending = {
         tag,
         untagged,
+        resolve: (statusLine) => {
+          clearTimeout(timeoutId);
+          resolve({ status: parseStatus(statusLine), statusLine, untagged });
+        },
+        reject: (err) => {
+          clearTimeout(timeoutId);
+          reject(err);
+        },
+      };
+
+      this.socket.write(`${tag} ${command}\r\n`);
+    });
+  }
+
+  /**
+   * Like `sendCommand`, but the command is expected to trigger a server
+   * "+ " continuation request before the tagged response — used for
+   * commands that send a client literal (e.g. APPEND).
+   */
+  private sendCommandExpectingContinuation(
+    command: string,
+    onContinue: () => void
+  ): Promise<CommandResult> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket) {
+        reject(new Error('Niet verbonden met de IMAP-server'));
+        return;
+      }
+      if (this.pending) {
+        reject(new Error('Er loopt al een IMAP-commando'));
+        return;
+      }
+
+      const tag = `A${++this.tagCounter}`;
+      const untagged: string[] = [];
+
+      const timeoutId = setTimeout(() => {
+        this.pending = null;
+        reject(new Error(`IMAP-commando time-out: ${command}`));
+      }, COMMAND_TIMEOUT_MS);
+
+      this.pending = {
+        tag,
+        untagged,
+        awaitingContinuation: true,
+        onContinuation: onContinue,
         resolve: (statusLine) => {
           clearTimeout(timeoutId);
           resolve({ status: parseStatus(statusLine), statusLine, untagged });
@@ -253,6 +320,24 @@ export class ImapClient {
     const expungeResult = await this.sendCommand('EXPUNGE');
     if (expungeResult.status !== 'OK') {
       throw new Error(`EXPUNGE mislukt: ${expungeResult.statusLine}`);
+    }
+  }
+
+  /** Appends a raw RFC822 message to a mailbox (e.g. saving a draft). */
+  async appendMessage(
+    mailboxName: string,
+    rawMessage: string,
+    flags: string[] = []
+  ): Promise<void> {
+    const byteLength = utf8ByteLength(rawMessage);
+    const flagsPart = flags.length > 0 ? ` (${flags.join(' ')})` : '';
+    const command = `APPEND ${quoteImapString(mailboxName)}${flagsPart} {${byteLength}}`;
+
+    const result = await this.sendCommandExpectingContinuation(command, () => {
+      this.socket?.write(`${rawMessage}\r\n`);
+    });
+    if (result.status !== 'OK') {
+      throw new Error(`APPEND naar "${mailboxName}" mislukt: ${result.statusLine}`);
     }
   }
 
