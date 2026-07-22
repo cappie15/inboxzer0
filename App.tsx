@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,11 +11,17 @@ import {
 } from '@react-navigation/native';
 import RootNavigator from './src/navigation/RootNavigator';
 import { paperLightTheme, paperDarkTheme } from './src/theme';
+import { useContactsStore } from './src/store/contactsStore';
 
 export default function App() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const paperTheme = isDark ? paperDarkTheme : paperLightTheme;
+  const loadContacts = useContactsStore((state) => state.loadContacts);
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
 
   const navigationTheme = {
     ...(isDark ? NavDarkTheme : NavLightTheme),

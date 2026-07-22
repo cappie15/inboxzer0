@@ -1,6 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, IconButton, Text, useTheme } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Button,
+  IconButton,
+  Text,
+  useTheme,
+} from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DraggableMailboxList from '../components/DraggableMailboxList';
 import {
@@ -23,11 +29,19 @@ export default function PreTriageScreen({
   const [startError, setStartError] = useState<string | null>(null);
 
   const mailboxes = useMailboxStore((state) => state.mailboxes);
+  const isLoading = useMailboxStore((state) => state.isLoading);
+  const loadError = useMailboxStore((state) => state.loadError);
+  const loadMailboxes = useMailboxStore((state) => state.loadMailboxes);
   const reorderMailboxes = useMailboxStore((state) => state.reorderMailboxes);
   const toggleMailboxSelected = useMailboxStore(
     (state) => state.toggleMailboxSelected
   );
   const startSession = useTriageStore((state) => state.startSession);
+
+  useEffect(() => {
+    loadMailboxes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const orderedMailboxes = useMemo(
     () => selectOrderedMailboxes(mailboxes),
@@ -76,13 +90,43 @@ export default function PreTriageScreen({
         Sleep om de verwerkingsvolgorde voor deze sessie aan te passen.
       </Text>
 
-      <View style={styles.listContainer}>
-        <DraggableMailboxList
-          mailboxes={orderedMailboxes}
-          onToggle={toggleMailboxSelected}
-          onReorder={reorderMailboxes}
-        />
-      </View>
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : loadError ? (
+        <View style={styles.loadingContainer}>
+          <Text
+            variant="bodyMedium"
+            style={{ color: theme.colors.error, textAlign: 'center' }}
+          >
+            {loadError}
+          </Text>
+          <Button onPress={loadMailboxes} style={{ marginTop: 12 }}>
+            Opnieuw proberen
+          </Button>
+        </View>
+      ) : mailboxes.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <Text
+            variant="bodyMedium"
+            style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}
+          >
+            Nog geen mailboxen gekoppeld. Voeg er één toe bij Instellingen.
+          </Text>
+          <Button onPress={onOpenSettings} style={{ marginTop: 12 }}>
+            Naar instellingen
+          </Button>
+        </View>
+      ) : (
+        <View style={styles.listContainer}>
+          <DraggableMailboxList
+            mailboxes={orderedMailboxes}
+            onToggle={toggleMailboxSelected}
+            onReorder={reorderMailboxes}
+          />
+        </View>
+      )}
 
       {startError && (
         <Text
@@ -129,6 +173,12 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
   errorText: {
     marginBottom: 8,

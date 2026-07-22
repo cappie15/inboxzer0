@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTriageStore } from '../store/triageStore';
 import { useMailboxStore } from '../store/mailboxStore';
 import { generateReplyDraft } from '../services/ai/draftGeneration';
-import { saveReplyDraft } from '../services/draftService';
+import { api } from '../services/apiClient';
 
 interface ReplyReviewScreenProps {
   onComplete: () => void;
@@ -97,7 +97,7 @@ export default function ReplyReviewScreen({ onComplete }: ReplyReviewScreenProps
     setIsSaving(true);
     setError(null);
     try {
-      await saveReplyDraft(mailbox, message, item.mode, draftText);
+      await api.saveReplyDraft(mailbox.id, message.imapUid, item.mode, draftText, message);
       setSavedNotice(notice);
       advance();
     } catch (err) {

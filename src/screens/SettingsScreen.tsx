@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   Button,
@@ -17,8 +17,6 @@ import {
   useMailboxStore,
 } from '../store/mailboxStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { saveImapCredentials } from '../services/imapCredentialsStore';
-import { ImapCredentials, MailProvider } from '../utils/types';
 
 interface SettingsScreenProps {
   onClose: () => void;
@@ -29,6 +27,7 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
   const [addDialogVisible, setAddDialogVisible] = useState(false);
 
   const mailboxes = useMailboxStore((state) => state.mailboxes);
+  const loadMailboxes = useMailboxStore((state) => state.loadMailboxes);
   const reorderMailboxes = useMailboxStore((state) => state.reorderMailboxes);
   const toggleMailboxSelected = useMailboxStore(
     (state) => state.toggleMailboxSelected
@@ -36,21 +35,13 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
   const addMailbox = useMailboxStore((state) => state.addMailbox);
   const removeMailbox = useMailboxStore((state) => state.removeMailbox);
 
-  const handleAddMailbox = (input: {
-    displayName: string;
-    emailAddress: string;
-    provider: MailProvider;
-    imapCredentials?: ImapCredentials;
-  }) => {
-    const id = addMailbox({
-      displayName: input.displayName,
-      emailAddress: input.emailAddress,
-      provider: input.provider,
-    });
-    if (input.imapCredentials) {
-      saveImapCredentials(id, input.imapCredentials).catch(() => undefined);
-    }
-  };
+  const loadSettings = useSettingsStore((state) => state.loadSettings);
+
+  useEffect(() => {
+    loadMailboxes();
+    loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const writingStyle = useSettingsStore((state) => state.writingStyle);
   const setWritingStyleMode = useSettingsStore(
@@ -198,7 +189,7 @@ export default function SettingsScreen({ onClose }: SettingsScreenProps) {
       <AddMailboxDialog
         visible={addDialogVisible}
         onDismiss={() => setAddDialogVisible(false)}
-        onSubmit={handleAddMailbox}
+        onSubmit={addMailbox}
       />
     </SafeAreaView>
   );
